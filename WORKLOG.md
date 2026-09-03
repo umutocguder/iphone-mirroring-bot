@@ -18,3 +18,11 @@ Bu dosya, iPhone Mirroring Bot projesinde yapılan tüm geliştirmeleri, mimari 
 - **Mevcut Durum ve Doğrulama**:
   - Proje Antigravity sol menüsündeki "Projects" listesinde `iphone-bot` olarak yerini aldı.
   - Git durumu ve remote bağlantısı aktif.
+
+### [2026-09-03 17:00] Dizin Yolu Senkronizasyonu ve Antigravity GitFolder Tanımı
+- **Görev ve Amaç**: `iphone-bot` projesinin Antigravity Projects panelinde eksiksiz `gitFolder` kaynağıyla listelenmesi ve diskteki `mycodespaces` yolu ile tam uyumlu hale getirilmesi.
+- **Teknik Kararlar**:
+  - `~/.gemini/config/projects/2e5ef972-48ed-48e1-8155-b368251b6ac6.json` dosyası `gitFolder` standardına göre güncellendi.
+  - `mycodespace` ve `mycodespaces` yolları sembolik link ile birbirine bağlandı.
+- **Etkilenen Dosyalar**:
+  - [WORKLOG.md](file:///Users/umut/mycodespaces/iphone-bot/WORKLOG.md)
