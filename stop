@@ -1,0 +1,3 @@
+#!/bin/sh
+mkdir -p "$HOME/.cache/mirror-bot" && touch "$HOME/.cache/mirror-bot/STOP"
+echo "STOP verildi."
