@@ -44,3 +44,18 @@ Bu dosya, iPhone Mirroring Bot projesinde yapılan tüm geliştirmeleri, mimari 
   - Python sözdizimi derlendi ve doğrulandı (`py_compile`).
   - Pencere listeleme (`./bot windows`) ve regex filtreleme testleri başarıyla tamamlandı.
 
+### [2026-09-05 00:42] Automated Unit Test Suite Implementation
+- **Goal & Purpose**: Implement automated unit tests adhering to Section 8 of AGENTS.md (Mandatory Automated Testing Standard).
+- **Implementation Highlights**:
+  - Implemented `tests/test_mirror_bot.py`:
+    - Validates Rect bounding box arithmetic, center calculation, and edge insets.
+    - Validates Turkish character normalization folding to clean ASCII.
+    - Validates OCR loose character matching (misrecognized '1', 'l', and 'i' substitutions).
+    - Validates join button discrimination between active "Katıl" and already completed "Katıldınız".
+- **Affected Files**:
+  - [tests/test_mirror_bot.py](file:///Users/umut/mycodespaces/iphone-bot/tests/test_mirror_bot.py)
+  - [WORKLOG.md](file:///Users/umut/mycodespaces/iphone-bot/WORKLOG.md)
+- **Current State & Verification**:
+  - `python3 -m unittest discover -s tests -p "test_*.py"`: 4/4 tests passed in 0.000s with 100% success.
+
+
