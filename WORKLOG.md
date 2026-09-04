@@ -58,4 +58,27 @@ Bu dosya, iPhone Mirroring Bot projesinde yapılan tüm geliştirmeleri, mimari 
 - **Current State & Verification**:
   - `python3 -m unittest discover -s tests -p "test_*.py"`: 4/4 tests passed in 0.000s with 100% success.
 
+### [2026-09-05 01:08] Ürünleştirme ve Ticari Sürüm Başlangıcı (Productization by 11hopem)
+- **Görev ve Amaç**: `iphone-bot` motorunun son kullanıcıya yönelik ticari bir macOS ürününe dönüştürülmesi ve ürünleşme yol haritasının başlatılması.
+- **İmza / Marka**: `by 11hopem`
+- **Ürünleşme Yol Haritası & Tasarım Kararları**:
+  1. **Kullanıcı Deneyimi & Form Faktörü**: Terminal ve Python bağımlılıklarından arındırılmış, macOS Menu Bar (Menü Çubuğu) üzerinde tek tıkla çalışan şık bir uygulama (SwiftUI / standalone binary).
+  2. **Güvenlik & Gizlilik Odaklı Mimari**: "Hiçbir bankacılık şifresi, API anahtarı veya kart bilgisi istemez; sunucuya sıfır veri gönderir." Apple'ın yerel iPhone Mirroring ekranını yerel Vision OCR ile okuyan %100 gizlilik odaklı mimari.
+  3. **Geniş Uygulama & Kampanya Havuzu**:
+     - Bonus Flaş (Garanti BBVA)
+     - Maximum Mobil (İş Bankası)
+     - World Mobil (Yapı Kredi)
+     - Juzdan (Akbank)
+     - Bankkart (Ziraat)
+     - Hopi & Boyner
+  4. **Gelir Modeli (Monetization)**:
+     - Gumroad / LemonSqueezy üzerinden tek seferlik lisans veya yıllık abonelik.
+     - "Ayda kazandırdığı bonus ve puanlar kendi ücretini fazlasıyla çıkarır" değer önerisi.
+- **Etkilenen Dosyalar**:
+  - [README.md](file:///Users/umut/mycodespaces/iphone-bot/README.md)
+  - [WORKLOG.md](file:///Users/umut/mycodespaces/iphone-bot/WORKLOG.md)
+- **Mevcut Durum**:
+  - `by 11hopem` imzası belgelere işlendi, GitHub'a pushlanacak.
+
+
 

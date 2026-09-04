@@ -1,4 +1,5 @@
 # iPhone Mirroring "Katıl" botu
+*by 11hopem*
 
 > Projenin amacı, kuralları, sahada doğrulanmış bulgular ve açık işler: **[PROJE.md](PROJE.md)**.
 > Devralıyorsan önce onu oku.
