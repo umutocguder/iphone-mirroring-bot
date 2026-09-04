@@ -1,5 +1,9 @@
 #!/usr/bin/env python3
+# Created by 11hopem (11 Hopem Software Ltd. Şti.)
+# Copyright (c) 2026 11hopem. All rights reserved.
+# Licensed under 11 Hopem Software Proprietary License.
 """iPhone Mirroring penceresindeki kampanya kartlarını gezip 'Katıl' butonlarına dokunan bot.
+
 
 Ekran okuma  : screencapture (bölge) + macOS Vision OCR (tr-TR)
 Girdi üretme : CoreGraphics event'leri (tık / scroll / swipe)
