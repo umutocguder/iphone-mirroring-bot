@@ -26,3 +26,21 @@ Bu dosya, iPhone Mirroring Bot projesinde yapılan tüm geliştirmeleri, mimari 
   - `mycodespace` ve `mycodespaces` yolları sembolik link ile birbirine bağlandı.
 - **Etkilenen Dosyalar**:
   - [WORKLOG.md](file:///Users/umut/mycodespaces/iphone-bot/WORKLOG.md)
+
+### [2026-09-04 08:56] Kararlılık ve Hata Düzeltmeleri (Bug Fixes)
+- **Görev ve Amaç**: `mirror_bot.py` içindeki kritik pencere taşıma, OCR filtreleme, swipe pencere sürükleme ve klavye girişi hatalarının giderilmesi.
+- **Teknik Kararlar ve Yapılan Değişiklikler**:
+  1. `reposition_window`: macOS Sequoia'da pencere başlığı boş veya cihaz adı olduğundan AppleScript'in patlaması engellendi, doğrudan `window 1` kontrolü eklendi.
+  2. `SKIP_WORDS`: "Katılındı" OCR edildiğinde oluşan `katiiindi` (3 adet i) biçimi ve `katiiiminiz` kelimesi listeye eklenerek kelime kaçırma/filtre atlama sorunu giderildi.
+  3. `swipe_back`: Sol kenar koordinatı `r.x + 3` noktasından pencere içeriğine (`r.x + max(16.0, r.w * 0.05)`) çekildi. Böylece swipe sırasında tüm macOS penceresini tutma/sürükleme (window drag) hatası çözüldü.
+  4. `type_text`: Türkçe karakterlerin (ı, ş vb.) klavye düzeninden bağımsız güvenle yazılabilmesi için `pbcopy` + `Cmd+V` yapıştırma desteği ve keystroke fallback'i eklendi.
+  5. `display_rects`: `ids` `None` döndüğünde oluşabilecek `TypeError` engellendi.
+  6. `occluders`: 10x10 pt ve altındaki görünmez / hayalet yardımcı pencerelerin botu engellemesi önlendi.
+  7. `dedupe-seconds`: Yavaş inen ve gecikmeli turlarda aynı butona tekrar tıklamayı önlemek için varsayılan süre 25'ten 60 saniyeye çıkarıldı.
+- **Etkilenen Dosyalar**:
+  - [mirror_bot.py](file:///Users/umut/mycodespaces/iphone-bot/mirror_bot.py)
+  - [WORKLOG.md](file:///Users/umut/mycodespaces/iphone-bot/WORKLOG.md)
+- **Mevcut Durum ve Doğrulama**:
+  - Python sözdizimi derlendi ve doğrulandı (`py_compile`).
+  - Pencere listeleme (`./bot windows`) ve regex filtreleme testleri başarıyla tamamlandı.
+

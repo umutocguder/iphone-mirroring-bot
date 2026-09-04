@@ -38,7 +38,7 @@ UNLOCK_WORDS = ("unlock your iphone", "iphone unuzun kilidini")
 CONNECT_WORDS = ("connect", "baglan")
 
 JOIN_WORDS = ("katii",)
-SKIP_WORDS = ("katiidiniz", "katiidin", "katiiim", "katiindi", "katiiamadi")
+SKIP_WORDS = ("katiidiniz", "katiidin", "katiiim", "katiiiminiz", "katiiindi", "katiindi", "katiiamadi")
 
 
 # ---------------------------------------------------------------- yardımcılar
@@ -143,6 +143,8 @@ def mirror_windows(onscreen_only: bool = True) -> list[tuple[Rect, str, str]]:
 def display_rects() -> list[Rect]:
     err, ids, count = Quartz.CGGetActiveDisplayList(16, None, None)
     out = []
+    if err != 0 or not ids:
+        return out
     for d in list(ids)[:count]:
         b = Quartz.CGDisplayBounds(d)
         out.append(Rect(b.origin.x, b.origin.y, b.size.width, b.size.height))
@@ -167,11 +169,17 @@ def reposition_window(r: Rect) -> bool:
     if abs(x - r.x) < 1 and abs(y - r.y) < 1:
         return False
     for name in APP_NAMES:
-        rc = subprocess.run(
-            ["osascript", "-e",
-             f'tell application "System Events" to tell process "{name}" to '
-             f'set position of (first window whose name is "{name}") to {{{int(x)}, {int(y)}}}'],
-            capture_output=True)
+        script = (
+            f'tell application "System Events" to tell process "{name}"\n'
+            f'  set frontmost to true\n'
+            f'  if (count of windows) > 0 then\n'
+            f'    set position of window 1 to {{{int(x)}, {int(y)}}}\n'
+            f'  else if exists (first window whose name is "{name}") then\n'
+            f'    set position of (first window whose name is "{name}") to {{{int(x)}, {int(y)}}}\n'
+            f'  end if\n'
+            f'end tell'
+        )
+        rc = subprocess.run(["osascript", "-e", script], capture_output=True)
         if rc.returncode == 0:
             print(f"pencere ekran içine alındı: ({int(x)},{int(y)})")
             time.sleep(0.5)
@@ -216,6 +224,8 @@ def occluders(rect: Rect) -> list[str]:
         b = w.get("kCGWindowBounds") or {}
         r = Rect(float(b.get("X", 0)), float(b.get("Y", 0)),
                  float(b.get("Width", 0)), float(b.get("Height", 0)))
+        if r.w <= 10 or r.h <= 10:
+            continue
         hit = rect.x < r.x + r.w and rect.x + rect.w > r.x and \
             rect.y < r.y + r.h and rect.y + rect.h > r.y
         if owner in APP_NAMES:
@@ -435,11 +445,24 @@ class Input:
         if self.dry_run:
             print(f"    [dry-run] metin yazılıyor: {text!r}")
             return
-        escaped = text.replace('\\', '\\\\').replace('"', '\\"')
-        cmd = f'tell application "System Events" to keystroke "{escaped}"'
-        res = subprocess.run(["osascript", "-e", cmd], capture_output=True, text=True)
-        if res.returncode != 0:
-            print(f"    ↳ UYARI: klavye girişi başarısız: {res.stderr.strip()}")
+        pasted = False
+        try:
+            p = subprocess.Popen(["pbcopy"], stdin=subprocess.PIPE)
+            p.communicate(input=text.encode("utf-8"))
+            if p.returncode == 0:
+                time.sleep(0.1)
+                cmd = 'tell application "System Events" to keystroke "v" using command down'
+                res = subprocess.run(["osascript", "-e", cmd], capture_output=True, text=True)
+                pasted = (res.returncode == 0)
+        except Exception:
+            pasted = False
+
+        if not pasted:
+            escaped = text.replace('\\', '\\\\').replace('"', '\\"')
+            cmd = f'tell application "System Events" to keystroke "{escaped}"'
+            res = subprocess.run(["osascript", "-e", cmd], capture_output=True, text=True)
+            if res.returncode != 0:
+                print(f"    ↳ UYARI: klavye girişi başarısız: {res.stderr.strip()}")
         time.sleep(0.4)
 
     def press_key(self, key_code: int = 36) -> None:
@@ -565,7 +588,8 @@ class Bot:
 
     def swipe_back(self) -> None:
         r = self.rect_full
-        self.inp.swipe(r.x + 3, r.cy, r.x + r.w * 0.75, r.cy)
+        start_x = r.x + max(16.0, r.w * 0.05)
+        self.inp.swipe(start_x, r.cy, r.x + r.w * 0.75, r.cy)
 
     def recover_to_list(self) -> bool:
         """Katılım sonrası açılan sheet'i veya detay sayfasını kapatıp listeye döner."""
@@ -956,7 +980,7 @@ def main(argv=None) -> None:
     sp.add_argument("--max-taps-per-screen", type=int, default=8)
     sp.add_argument("--dedupe-radius", type=float, default=70,
                     help="bu yarıçap içinde aynı metne ikinci kez dokunma (pt)")
-    sp.add_argument("--dedupe-seconds", type=float, default=25,
+    sp.add_argument("--dedupe-seconds", type=float, default=60,
                     help="aynı butona tekrar dokunmama süresi (sn)")
     sp.add_argument("--max-rounds", type=int, default=40)
     sp.add_argument("--scroll", type=int, default=-300,

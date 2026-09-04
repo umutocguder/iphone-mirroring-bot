@@ -1,5 +1,8 @@
 # iPhone Mirroring "Katıl" botu
 
+> Projenin amacı, kuralları, sahada doğrulanmış bulgular ve açık işler: **[PROJE.md](PROJE.md)**.
+> Devralıyorsan önce onu oku.
+
 Bonus Flaş / Maximum Mobil gibi kampanya listelerini iPhone Mirroring penceresi üzerinden
 gezer, ekranda gördüğü **Katıl** butonlarını bulup üstlerine tıklar, yatay kaydırmalı kart
 satırlarını da sağa doğru tarar. Uygulamanın içine hiç girmez — tamamen ekran okuma +
@@ -103,8 +106,12 @@ harfe indirgenir. Sonuç `katii` tam kelimesine eşitse tıklanır:
 | `Katıldınız`, `Katıldın`, `Katılım Sağla`, `Katkı`, `Katalog` | ⛔ atlar |
 | 24 karakterden uzun açıklama satırları | ⛔ atlar |
 
-Katılınan kampanyalar `Katıldınız`a döndüğü için ikinci kez tıklanmaz; ayrıca aynı tur
-içinde aynı metne `--dedupe-radius` (70pt) yarıçapında ikinci kez dokunulmaz.
+Aynı butona `--dedupe-radius` (70pt) yarıçapında ve `--dedupe-seconds` (25 sn) içinde
+ikinci kez dokunulmaz.
+
+> **Not:** Bonus Flaş katıldıktan sonra buton metnini `Katıldınız` yapmıyor —
+> katılmış kartlar **`Takip Et` / `Takip ve Detay`** gösteriyor. Yani "katılmışları
+> metninden ayırt etme" garantisi yok; tekrar çalıştırmada aynı karta dokunabilir.
 
 ## Çalıştığını nasıl anlarım
 
@@ -137,8 +144,9 @@ görürseniz gerçek turu çalıştırmayın, bana çıktıyı gönderin.
 `pencerenin önünde başka pencere var: X` (X penceresini telefon penceresinin üstünden çekin),
 `fare kullanıcı tarafından oynatıldı` (fareye dokunmayın veya `--no-guard` ekleyin).
 
-**4. Telefonda son kontrol** — katıldığı kampanyalarda buton `Katıldınız`a dönmüş olur.
-Aynı komutu tekrar çalıştırmak zararsızdır: katılınmışları atlar, sadece yenilere dokunur.
+**4. Telefonda son kontrol** — katılınan kartlar `Takip Et / Takip ve Detay`e döner.
+Aynı komutu tekrar çalıştırmak zararsızdır (katılım tekrarı bir şey bozmaz) ama
+katılmışları metninden ayırt edemediği için onlara tekrar dokunabilir.
 
 ## Kayıtlar
 
