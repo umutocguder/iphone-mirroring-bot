@@ -699,39 +699,73 @@ class Bot:
         return "|".join(sorted(b.norm for b in self.look()
                                if abs(b.rect.cy - y) <= half and b.norm))
 
-    def sweep_row(self, y: float, back: bool = False) -> int:
-        """Yatay kaydırmalı kart satırını sağa gezer; her adımda ekranın tamamını tarar.
+    def sweep_row(self, y: float) -> int:
+        """Yatay kaydırmalı kart satırını sağa (sonraki karta) doğru gezer.
 
-        Bant yalnızca satırın hangi noktadan kaydırılacağını ve karusel olup olmadığını
-        anlamak için kullanılır; dokunuş taraması bant ile sınırlı değildir, çünkü yeni
-        kartın Katıl butonu bandın biraz dışına düşebilir.
+        Başa dönen (infinite loop / paging) karuselleri başa döndüğü an yakalar ve bitirir.
+        Son karttaki 'Katıl' butonunu da asla kaçırmadan tıklar.
         """
         tapped = 0
-        prev = self.band_fingerprint(y)
-        seen = {prev}
         settle = max(self.args.after_scroll, 0.45)
+
+        # 0. İlk kartta görünen Katıl butonu varsa tıkla
+        tapped += self.tap_visible_joins(band=(y, self.args.band))
+
+        initial_fp = self.band_fingerprint(y)
+        if not initial_fp:
+            return tapped
+
+        initial_tokens = set(initial_fp.split("|"))
+        seen_fps = {initial_fp}
+        seen_card_keys: set[str] = set()
+
+        first_boxes = self.look()
+        cands = [b for b in first_boxes if abs(b.rect.cy - y) <= self.args.band / 2 and len(b.norm) >= 4]
+        if cands:
+            seen_card_keys.add(cands[0].norm)
+
+        prev_fp = initial_fp
         announced = False
-        for _ in range(self.args.max_hscroll):
-            self.hstep(y, back=back)
+
+        for step in range(1, self.args.max_hscroll + 1):
+            self.hstep(y, back=False)
             time.sleep(settle)
-            fp = self.band_fingerprint(y)
-            if fp == prev:
+
+            curr_fp = self.band_fingerprint(y)
+
+            # 1. İçerik hiç değişmediyse (yatay kaydırma bitti veya bu satır karusel değil)
+            if curr_fp == prev_fp:
+                # Son kartta Katıl varsa asla kaçırma, tıkla ve bitir!
+                tapped += self.tap_visible_joins(band=(y, self.args.band))
                 return tapped
-            if fp in seen:
-                if announced:
-                    print(f"  ↔ satır başa sardı, bırakılıyor: y={y:.0f}")
+
+            # 2. Başa döndü mü kontrolü (Paging carousel / Infinite wrap-around)
+            curr_tokens = set(curr_fp.split("|"))
+            overlap = len(initial_tokens & curr_tokens) / max(1, len(initial_tokens | curr_tokens))
+
+            curr_boxes = self.look()
+            curr_cands = [b for b in curr_boxes if abs(b.rect.cy - y) <= self.args.band / 2 and len(b.norm) >= 4]
+            curr_ctx = curr_cands[0].norm if curr_cands else ""
+
+            if curr_fp in seen_fps or (curr_ctx and curr_ctx in seen_card_keys) or (step >= 2 and overlap > 0.65):
+                if announced or step > 1:
+                    print(f"  ↔ Karusel başa döndü (ilk karta geldi), bırakılıyor: y={y:.0f}")
                 return tapped
-            seen.add(fp)
-            prev = fp
+
+            seen_fps.add(curr_fp)
+            if curr_ctx:
+                seen_card_keys.add(curr_ctx)
+            prev_fp = curr_fp
+
             if not announced:
-                print(f"  ↔ yatay kaydırmalı satır: y={y:.0f}")
+                print(f"  ↔ yatay kaydırmalı satır taranıyor: y={y:.0f}")
                 announced = True
-            # Yeni karta kaydırıldı: bu banttaki eski butonların dedupe koordinat kilidini kaldır
-            half = self.args.band / 2
-            self.recent = [r for r in self.recent if abs(r[2] - y) > half]
-            tapped += self.tap_visible_joins()
+
+            # Yeni karta geçildi: butonları tıkla
+            tapped += self.tap_visible_joins(band=(y, self.args.band))
             if self.taps >= self.args.max_taps:
                 return tapped
+
         return tapped
 
     def hstep(self, y: float, back: bool = False) -> None:
@@ -739,23 +773,19 @@ class Bot:
         if self.args.hmode == "swipe":
             a, b = (0.22, 0.78) if back else (0.78, 0.22)
             self.inp.swipe(self.rect.x + self.rect.w * a, y,
-                           self.rect.x + self.rect.w * b, y, steps=22)
+                           self.rect.x + self.rect.w * b, y, steps=14)
         else:
             self.inp.hscroll(self.rect.cx, y, amount)
 
     def sweep_bands(self) -> list[float]:
-        """Kartın tamamının görünebildiği güvenli orta bölgedeki bant merkezleri.
-
-        Görüntü kenarına yapışık bantlarda yatay kaydırma yapılmaz: orada kart yarım
-        görünür ve sağa geçince yeni kartın Katıl butonu ekran dışında kalır.
-        """
-        margin = self.args.edge_margin if self.args.edge_margin is not None else self.args.band
+        """Kartın tamamının görünebildiği güvenli bant merkezleri (tekrarı önler)."""
+        margin = self.args.edge_margin if self.args.edge_margin is not None else self.args.band * 0.4
         first = self.rect.y + margin + self.args.band / 2
         last = self.rect.y + self.rect.h - margin - self.args.band / 2
         if last < first:
             return [self.rect.cy]
         out, y = [], first
-        step = self.args.band / 2
+        step = self.args.band * 0.85
         while y <= last + 1:
             out.append(y)
             y += step
@@ -769,10 +799,6 @@ class Bot:
             tapped += self.sweep_row(y)
             if self.taps >= self.args.max_taps:
                 return tapped
-            if not self.args.no_hsweep_back:
-                tapped += self.sweep_row(y, back=True)
-                if self.taps >= self.args.max_taps:
-                    return tapped
         return tapped
 
     def scroll_to_top(self) -> None:

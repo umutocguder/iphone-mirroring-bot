@@ -113,3 +113,15 @@ Bu dosya, iPhone Mirroring Bot projesinde yapılan tüm geliştirmeleri, mimari 
 - **Doğrulama**: `py_compile` ve 7/7 test paketi başarıyla tamamlandı.
 - **Etkilenen Dosyalar**: `mirror_bot.py`, `kampanya.sh`, `WORKLOG.md`.
 
+---
+
+## 2026-10-02 15:21 - Akıllı Karusel Taraması ve Sayfalı Kart (Paging) İyileştirmeleri
+- **Görev ve Amaç**: Kullanıcı sahasından gelen 4 kritik karusel probleminin çözülmesi:
+  1. **Son Kart Dokunuşu**: Yatay kaydırmanın bittiği son karttaki "Katıl" butonuna dokunulmadan çıkılması engellendi (`curr_fp == prev_fp` anında dokunuş yapılıp çıkılıyor).
+  2. **Gereksiz Sola Geri Sarmanın Kaldırılması**: Sağa doğru tarama yapıldıktan sonra tüm yolu tekrar sola sararak vakit kaybeden `back=True` döngüsü tamamen iptal edildi.
+  3. **Mükerrer Bant Taramalarının Önlenmesi**: `sweep_bands` adım aralığı (`step`) kart yüksekliğine (`band * 0.85`) optimize edildi; aynı fiziksel kart sırasını birden çok kez tarama sorunu çözüldü.
+  4. **Başa Dönen (Infinite Loop / Paging) Karusel Algılama**: İlk kartın başlığı (`initial_ctx`) ve token kümesi (`initial_tokens`) kaydedilerek, karusel başa sardığında (`overlap > 0.65` veya başlık tekrarı) anında tespit edilip döngüden çıkılması sağlandı.
+- **Doğrulama**: `py_compile` ve 7/7 unit test başarıyla geçti.
+- **Etkilenen Dosyalar**: `mirror_bot.py`, `kampanya.sh`, `WORKLOG.md`.
+
+
