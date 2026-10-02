@@ -503,6 +503,8 @@ class Bot:
         self.recent: list[tuple[str, float, float, float]] = []
         self.done_contexts: set[str] = set()
         self.swept_carousel_fps: set[str] = set()
+        self.swept_carousel_titles: set[str] = set()
+        self.swept_carousel_sections: set[str] = set()
 
     def insets(self) -> tuple[float, float, float, float]:
         """--inset verilmediyse pencere yüksekliğinden hesapla (uygulamadan bağımsız)."""
@@ -645,7 +647,7 @@ class Bot:
         cands.sort(key=lambda b: (tb.rect.y - b.rect.y))
         return cands[0].norm
 
-    def tap_visible_joins(self, band: tuple[float, float] | None = None) -> int:
+    def tap_visible_joins(self, band: tuple[float, float] | None = None, card_y: float | None = None) -> int:
         """Görünen ekrandaki tüm Katıl butonlarına sırayla dokunur."""
         tapped = 0
         radius = self.args.dedupe_radius
@@ -658,7 +660,10 @@ class Bot:
                 return tapped
             boxes = self.look()
             targets = [b for b in boxes if is_join(b, self.extra, self.args.max_chars)]
-            if band is not None:
+            # card_y verilmişse: kartın başlığından butonuna kadar olan tüm dikey alanı (y - 50 .. y + 220) kapsar
+            if card_y is not None:
+                targets = [b for b in targets if (card_y - 50) <= b.rect.cy <= (card_y + 220)]
+            elif band is not None:
                 targets = [b for b in targets if abs(b.rect.cy - band[0]) <= band[1] / 2]
 
             valid_targets = []
@@ -726,28 +731,66 @@ class Bot:
         boxes.sort(key=lambda b: len(b.norm), reverse=True)
         return boxes[0].norm
 
+    def get_section_header_above(self, y: float) -> str:
+        """Karuselin hemen üzerindeki kategori/bölüm başlığı (örn: EN SEVİLEN KAMPANYALAR)."""
+        boxes = self.look()
+        cands = [b for b in boxes
+                 if b.rect.cy < y and (y - b.rect.cy) < 220
+                 and len(b.norm) >= 5
+                 and not is_join(b, self.extra, self.args.max_chars)
+                 and b.norm not in {"bonus", "paracard", "parakart", "tumu", "kampanya takip"}]
+        if not cands:
+            return ""
+        cands.sort(key=lambda b: (y - b.rect.cy))
+        return cands[0].norm
+
+    def is_already_swept_carousel(self, y: float) -> bool:
+        """Bu karusel satırı daha önceki turlarda zaten tarandı mı kontrol eder."""
+        title = self.get_card_title_in_band(y)
+        sec = self.get_section_header_above(y)
+        if title and title in self.swept_carousel_titles:
+            return True
+        if sec and sec in self.swept_carousel_sections:
+            return True
+        return False
+
     def sweep_row(self, y: float) -> int:
         """Yatay kaydırmalı kart satırını sağa (sonraki karta) doğru gezer.
 
         - BONUS / PARACARD sabit filtre bandına dokunmaz.
+        - Zaten taranmış karuselleri (başlık veya bölüm eşleşmesiyle) kesinlikle tekrar taramaz.
         - Başa dönen (infinite loop / paging) karuselleri ilk karta döndüğü an yakalar ve durur.
         - Sağa kaydırmanın son kartındaki Katıl butonunu asla kaçırmadan tıklar.
+        - Butonları kartın tüm dikey aralığında (card_y=y) arar; alt kısımda kalan butonları kaçırmaz.
         - Asla sola geri sarmaz (back=False).
         """
         if self.is_filter_band(y):
             return 0
 
+        # Bu karuseli daha önceki turlarda zaten taradıysak asla tekrar tarama!
+        if self.is_already_swept_carousel(y):
+            title = self.get_card_title_in_band(y)
+            sec = self.get_section_header_above(y)
+            print(f"  ↳ Karusel daha önce tarandı, atlanıyor: {sec or title}")
+            return 0
+
         tapped = 0
         settle = max(self.args.after_scroll, 0.45)
 
-        # 0. İlk kartta görünen Katıl butonu varsa tıkla
-        tapped += self.tap_visible_joins(band=(y, self.args.band))
+        # 0. İlk kartta görünen Katıl butonu varsa tıkla (kart dikey aralığında)
+        tapped += self.tap_visible_joins(card_y=y)
 
         initial_fp = self.band_fingerprint(y)
         if not initial_fp:
             return tapped
 
         initial_title = self.get_card_title_in_band(y)
+        sec_header = self.get_section_header_above(y)
+        if initial_title:
+            self.swept_carousel_titles.add(initial_title)
+        if sec_header:
+            self.swept_carousel_sections.add(sec_header)
+
         initial_tokens = set(initial_fp.split("|"))
         seen_fps = {initial_fp}
         seen_titles = {initial_title} if initial_title else set()
@@ -762,10 +805,10 @@ class Bot:
             curr_fp = self.band_fingerprint(y)
             curr_title = self.get_card_title_in_band(y)
 
-            # 1. İçerik hiç değişmediyse (yatay kaydırma bitti / duvar)
+            # 1. İçerik hiç değişmediyse (yatay kaydırma bitti / duvar veya karusel değil)
             if curr_fp == prev_fp:
                 # Son kartta Katıl varsa asla kaçırma, tıkla ve bitir!
-                tapped += self.tap_visible_joins(band=(y, self.args.band))
+                tapped += self.tap_visible_joins(card_y=y)
                 return tapped
 
             # 2. Başa döndü mü kontrolü (Paging carousel / Infinite wrap-around)
@@ -791,19 +834,20 @@ class Bot:
             seen_fps.add(curr_fp)
             if curr_title:
                 seen_titles.add(curr_title)
+                self.swept_carousel_titles.add(curr_title)
             prev_fp = curr_fp
 
             if not announced:
                 print(f"  ↔ yatay kaydırmalı satır taranıyor: y={y:.0f}")
                 announced = True
 
-            # Yeni karta geçildi: butonları tıkla
-            tapped += self.tap_visible_joins(band=(y, self.args.band))
+            # Yeni karta geçildi: butonları tıkla (kart dikey aralığında)
+            tapped += self.tap_visible_joins(card_y=y)
             if self.taps >= self.args.max_taps:
                 return tapped
 
         # Döngü max_hscroll sınırına ulaştıysa son kartı da kontrol et
-        tapped += self.tap_visible_joins(band=(y, self.args.band))
+        tapped += self.tap_visible_joins(card_y=y)
         return tapped
 
     def hstep(self, y: float, back: bool = False) -> None:
@@ -812,22 +856,20 @@ class Bot:
         self.inp.hscroll(self.rect.cx, y, amount)
 
     def sweep_bands(self) -> list[float]:
-        """Kartın tamamının görünebildiği güvenli bant merkezleri.
+        """Kartın ve altındaki 'Katıl' butonunun ekranda tam göründüğü güvenli bant merkezleri.
 
-        BONUS | PARACARD ve arama çubuğu gibi sabit üst filtre alanını (y < self.rect.y + 240)
-        kesinlikle hariç tutar.
+        - Üst sınır (y >= rect.y + 240): BONUS | PARACARD ve arama çubuğu gibi sabit üst filtre alanını dışlar.
+        - Alt sınır (y <= rect_bottom - 180): Butonun ekranın altında veya sekme çubuğu arkasında kalmasını
+          kesinlikle önler. Buton her zaman 430-760 güvenli görüş alanında kalır.
         """
-        margin = self.args.edge_margin if self.args.edge_margin is not None else self.args.band * 0.4
         min_top = self.rect.y + 240
-        first = max(min_top, self.rect.y + margin + self.args.band / 2)
-        last = self.rect.y + self.rect.h - margin - self.args.band / 2
-        if last < first:
-            return [max(min_top, self.rect.cy)]
-        out, y = [], first
-        step = self.args.band * 0.85
-        while y <= last + 1:
+        max_bottom = self.rect.y + self.rect.h - 180
+        if max_bottom < min_top:
+            return [self.rect.cy]
+        out, y = [], min_top + 40
+        while y <= max_bottom:
             out.append(y)
-            y += step
+            y += self.args.band * 0.85
         return out
 
     def sweep_rows(self) -> int:
@@ -1203,7 +1245,7 @@ def main(argv=None) -> None:
                     help="yansıtma kopmuşsa Connect'e basmayı dene")
     sp.add_argument("--hmode", choices=("wheel", "swipe"), default="wheel",
                     help="yatay ilerletme yöntemi: trackpad scroll (güvenli) veya swipe")
-    sp.add_argument("--hscroll", type=int, default=-250,
+    sp.add_argument("--hscroll", type=int, default=-380,
                     help="yatay kaydırmalı satırlarda adım (px, negatif = sağa ilerle)")
     sp.add_argument("--max-hscroll", type=int, default=25, help="bir satırda en fazla yatay adım")
     sp.add_argument("--band", type=float, default=170, help="yatay tarama bandı yüksekliği (pt)")

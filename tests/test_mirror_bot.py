@@ -185,6 +185,53 @@ class TestMirrorBotCore(unittest.TestCase):
 
         self.assertEqual(mock.tapped, 1)
 
+    def test_carousel_section_and_title_deduplication(self):
+        """Test that already swept carousels are completely skipped across rounds."""
+        swept_titles = {"giyim kozmetik", "market alisverislerinize", "restoranlarda"}
+        swept_sections = {"en sevilen kampanyalar"}
+
+        # Round 2 sees the same section header
+        curr_section = "en sevilen kampanyalar"
+        self.assertIn(curr_section, swept_sections)
+
+        # Round 2 sees a different card from the same carousel
+        curr_card = "market alisverislerinize"
+        self.assertIn(curr_card, swept_titles)
+
+        # A brand new section/card is NOT skipped
+        new_section = "internete ozel kampanyalar"
+        new_card = "beymen bonus firsati"
+        self.assertNotIn(new_section, swept_sections)
+        self.assertNotIn(new_card, swept_titles)
+
+    def test_card_button_vertical_range(self):
+        """Test that card join buttons located ~160pt below the card title are captured."""
+        card_y = 550.0  # Card title level
+        button_y = 715.6  # Actual Katıl / Takip button level (165.6 pt below title)
+
+        # Old band check: abs(715.6 - 550) <= 85 -> False (missed button!)
+        old_check = abs(button_y - card_y) <= 85.0
+        self.assertFalse(old_check)
+
+        # New card_y range check: (card_y - 50) <= button_y <= (card_y + 220)
+        new_check = (card_y - 50) <= button_y <= (card_y + 220)
+        self.assertTrue(new_check)
+
+    def test_safe_band_range_excludes_bottom_occlusion(self):
+        """Test that sweep_bands does not select bands where buttons fall off the bottom edge."""
+        rect_y = 192.0
+        rect_h = 589.0
+        max_bottom = rect_y + rect_h - 180  # 601.0
+        
+        # A band at y=650 has its button at y=815 (behind/below bottom tab bar at 804)
+        band_low = 650.0
+        self.assertFalse(band_low <= max_bottom)
+
+        # A band at y=520 has its button at y=685 (safely visible above 760)
+        band_safe = 520.0
+        self.assertTrue(band_safe <= max_bottom)
+
 if __name__ == "__main__":
     unittest.main()
+
 

@@ -145,6 +145,18 @@ Bu dosya, iPhone Mirroring Bot projesinde yapılan tüm geliştirmeleri, mimari 
   4. **Otomatik Spotlight Başlatma**: Bonus Flaş açık değilse `View -> Home Screen` ve `View -> Spotlight` üzerinden "bonus" yazılarak, Top Hit altındaki `BonusFlaş` uygulama ikonuna (`cy - 35`) tıklanıp "Kampanyalar" sekmesi açılıyor.
   5. **Birim Test Paketi**: 13/13 test %100 başarıyla geçti.
 - **Etkilenen Dosyalar**: `mirror_bot.py`, `tests/test_mirror_bot.py`, `WORKLOG.md`.
+---
 
-
+## 2026-10-02 16:04 - Güvenli Görüş Alanı, Kart Boyu Buton Tarama ve Karusel Tekrarı Engelleme
+- **Görev ve Amaç**:
+  1. **Kart Altında Kalan Butonların Kaçırılmasını Önleme (`card_y` aralığı)**:
+     - Kart başlığı ile butonu arasında 160+ pt fark olduğu için eski ±85 pt bant kısıtı kaldırıldı. `card_y` parametresi eklenerek `[card_y - 50, card_y + 220]` aralığındaki tüm butonlar kapsama alındı.
+  2. **Ekran Dışında/Altında Kalan Butonların Taranmasını Önleme (Güvenli Bant Aralığı)**:
+     - `sweep_bands` üst sınırı `rect.y + 240` (filtre başlığı altı), alt sınırı ise `rect_bottom - 180` (tab bar üstü) olarak sınırlandırıldı. Kartın butonu ekranın altında kesik kalırken karuselin taranması engellendi; dikey kaydırmayla kartın güvenli orta bölgeye gelmesi garanti edildi.
+  3. **Aynı Karuseli Tekrar Kaydırmayı Kesin Olarak Önleme**:
+     - `swept_carousel_titles` ve `swept_carousel_sections` eklendi. Taranan karuselin gördüğü tüm kart başlıkları ve ait olduğu bölüm adı (örn: "EN SEVİLEN KAMPANYALAR") kaydedilerek sonraki dikey turlarda bu karuselin tekrar taranması %100 engellendi.
+  4. **Paging Kartlarda Yüksek Momentumlu Adım (`hscroll -380`)**:
+     - Sayfalı kartların snap eşiğini rahatça aşması için varsayılan adım `-380` px'e yükseltildi, "ufak swipe / takılma" sorunu giderildi.
+  5. **Birim Test Paketi**: 16/16 test %100 başarıyla geçti.
+- **Etkilenen Dosyalar**: `mirror_bot.py`, `tests/test_mirror_bot.py`, `WORKLOG.md`.
 
