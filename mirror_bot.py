@@ -936,13 +936,21 @@ class Bot:
     def ensure_bonus_app_open(self) -> None:
         """Uygulama veya Kampanyalar listesi açık değilse Spotlight ile açıp Kampanyalar'a gider."""
         boxes = self.look()
-        if any("kampanya" in b.norm or "bonus" in b.norm for b in boxes) and self.on_list():
+        # Eğer ekranda zaten 'Kampanyalar' veya 'Bonus' kelimeleri varsa uygulama zaten açık!
+        if any("kampanya" in b.norm or "bonus" in b.norm for b in boxes):
+            for b in boxes:
+                if "kampanya" in b.norm and b.rect.cy > self.rect.y + self.rect.h * 0.65:
+                    print("  → Alt menüdeki 'Kampanyalar' sekmesine dokunuluyor…")
+                    self.inp.click(b.rect.cx, b.rect.cy)
+                    time.sleep(1.0)
+                    return
             return
 
-        print("📱 Kampanya listesi açık değil, Spotlight ile Bonus Flaş başlatılıyor…")
+        print("📱 Kampanya listesi açık değil, Spotlight ile BonusFlaş başlatılıyor…")
         activate_mirror()
         time.sleep(0.4)
 
+        # 1. Spotlight'ı tetikle
         subprocess.run([
             "osascript", "-e",
             'tell application "System Events" to tell process "iPhone Mirroring"\n'
@@ -955,11 +963,29 @@ class Bot:
         ], capture_output=True)
         time.sleep(0.8)
 
-        self.inp.type_text("Bonus")
-        time.sleep(0.4)
-        self.inp.press_key(36)
+        # 2. "BonusFlas" yaz (tam uygulama adı)
+        self.inp.type_text("BonusFlas")
+        time.sleep(1.0)
+
+        # 3. Spotlight sonuçlarında 'BonusFlaş' veya 'Bonus' kutusunu bul ve tıkla!
+        spotlight_boxes = self.look()
+        app_target = None
+        for b in spotlight_boxes:
+            if "bonus" in b.norm or "flas" in b.norm:
+                if b.rect.cy > self.rect.y + self.rect.h * 0.15:
+                    app_target = b
+                    break
+
+        if app_target:
+            print(f"  → Spotlight sonucundaki uygulamaya dokunuluyor: {app_target.text!r} @ ({app_target.rect.cx:.0f},{app_target.rect.cy:.0f})")
+            self.inp.click(app_target.rect.cx, app_target.rect.cy)
+        else:
+            print("  → Uygulama satırı OCR ile bulunamadı, Return tuşuna basılıyor…")
+            self.inp.press_key(36)
+
         time.sleep(2.5)
 
+        # 4. Kampanyalar sekmesini bul ve tıkla
         self.refresh_rect()
         boxes = self.look()
         for b in boxes:
