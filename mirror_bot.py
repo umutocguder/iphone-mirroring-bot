@@ -502,6 +502,7 @@ class Bot:
         self.tab_sig: list[str] = []
         self.recent: list[tuple[str, float, float, float]] = []
         self.done_contexts: set[str] = set()
+        self.swept_carousel_fps: set[str] = set()
 
     def insets(self) -> tuple[float, float, float, float]:
         """--inset verilmediyse pencere yüksekliğinden hesapla (uygulamadan bağımsız)."""
@@ -770,10 +771,11 @@ class Bot:
 
     def hstep(self, y: float, back: bool = False) -> None:
         amount = -self.args.hscroll if back else self.args.hscroll
-        if self.args.hmode == "swipe":
-            a, b = (0.22, 0.78) if back else (0.78, 0.22)
+        # Sayfalı (paging) üst kartlarda ve swipe modunda parmak çekme hareketi kullanılır
+        if self.args.hmode == "swipe" or y < self.rect.y + self.rect.h * 0.45:
+            a, b = (0.20, 0.80) if back else (0.80, 0.20)
             self.inp.swipe(self.rect.x + self.rect.w * a, y,
-                           self.rect.x + self.rect.w * b, y, steps=14)
+                           self.rect.x + self.rect.w * b, y, steps=12)
         else:
             self.inp.hscroll(self.rect.cx, y, amount)
 
@@ -796,7 +798,11 @@ class Bot:
             return 0
         tapped = 0
         for y in self.sweep_bands():
+            fp = self.band_fingerprint(y)
+            if not fp or fp in self.swept_carousel_fps:
+                continue
             tapped += self.sweep_row(y)
+            self.swept_carousel_fps.add(fp)
             if self.taps >= self.args.max_taps:
                 return tapped
         return tapped
@@ -927,6 +933,42 @@ class Bot:
         print("  ✓ Arama tamamlandı, sonuç listesi taranıyor…")
         return True
 
+    def ensure_bonus_app_open(self) -> None:
+        """Uygulama veya Kampanyalar listesi açık değilse Spotlight ile açıp Kampanyalar'a gider."""
+        boxes = self.look()
+        if any("kampanya" in b.norm or "bonus" in b.norm for b in boxes) and self.on_list():
+            return
+
+        print("📱 Kampanya listesi açık değil, Spotlight ile Bonus Flaş başlatılıyor…")
+        activate_mirror()
+        time.sleep(0.4)
+
+        subprocess.run([
+            "osascript", "-e",
+            'tell application "System Events" to tell process "iPhone Mirroring"\n'
+            '  try\n'
+            '    click menu item "Spotlight" of menu 1 of menu bar item "View" of menu bar 1\n'
+            '  on error\n'
+            '    keystroke "3" using command down\n'
+            '  end try\n'
+            'end tell'
+        ], capture_output=True)
+        time.sleep(0.8)
+
+        self.inp.type_text("Bonus")
+        time.sleep(0.4)
+        self.inp.press_key(36)
+        time.sleep(2.5)
+
+        self.refresh_rect()
+        boxes = self.look()
+        for b in boxes:
+            if "kampanya" in b.norm:
+                print(f"  → 'Kampanyalar' sekmesine dokunuluyor @ ({b.rect.cx:.0f},{b.rect.cy:.0f})")
+                self.inp.click(b.rect.cx, b.rect.cy)
+                time.sleep(1.2)
+                break
+
     def run(self) -> None:
         activate_mirror()
         self.refresh_rect()
@@ -944,6 +986,7 @@ class Bot:
         started = time.time()
         try:
             self.check_session()
+            self.ensure_bonus_app_open()
             self.learn_tab_bar()
             if getattr(self.args, "search", None):
                 self.search_and_filter(self.args.search)

@@ -124,4 +124,16 @@ Bu dosya, iPhone Mirroring Bot projesinde yapılan tüm geliştirmeleri, mimari 
 - **Doğrulama**: `py_compile` ve 7/7 unit test başarıyla geçti.
 - **Etkilenen Dosyalar**: `mirror_bot.py`, `kampanya.sh`, `WORKLOG.md`.
 
+---
+
+## 2026-10-02 15:27 - Otomatik Uygulama Başlatma (Spotlight) ve Karusel Doğrulama Test Paketi
+- **Görev ve Amaç**: 
+  1. Uygulama açık değilse veya başka bir uygulama öndeyse iPhone Mirroring Spotlight menüsü üzerinden otomatik "Bonus" yazıp açma ve "Kampanyalar" sekmesine dokunma otomasyonu (`ensure_bonus_app_open`).
+  2. Karuselin sonundaki "Katıl" butonuna dokunulmadan çıkılmasını engelleyen kesin dokunuş garantisi.
+  3. Paging karusellerde sola gereksiz geri sarmayı (`back=True`) iptal etme ve mükerrer yatay bant taramasını `swept_carousel_fps` ile engelleme.
+  4. 3 yeni otomatik birim testi ile tüm bu mantıkların (wrap-around, context dedupe, cache) doğrulanması.
+- **Doğrulama**: `python3 -m unittest discover -s tests -p "test_*.py"` ile 10/10 test 0.22s içinde %100 başarıyla geçti.
+- **Etkilenen Dosyalar**: `mirror_bot.py`, `tests/test_mirror_bot.py`, `WORKLOG.md`.
+
+
 

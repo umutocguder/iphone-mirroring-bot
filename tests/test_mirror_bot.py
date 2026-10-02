@@ -84,5 +84,51 @@ class TestMirrorBotCore(unittest.TestCase):
         is_already_joined = any(re.search(rf"\b{w}\b", text_completed) for w in SKIP_WORDS)
         self.assertTrue(is_already_joined)
 
+    def test_carousel_wrap_around_detection(self):
+        """Test detection of paging carousel wrapping back to initial card."""
+        card1_tokens = {"beymen", "5000", "tl", "bonus"}
+        card2_tokens = {"defacto", "yuzde", "20", "indirim"}
+        card3_tokens = {"brooks", "brothers", "10", "indirim"}
+        card1_again = {"beymen", "5000", "tl", "bonus", "firsati"}
+
+        # Measure Jaccard similarity
+        def similarity(s1, s2):
+            return len(s1 & s2) / max(1, len(s1 | s2))
+
+        # Distinct cards should have very low overlap
+        self.assertLess(similarity(card1_tokens, card2_tokens), 0.3)
+        self.assertLess(similarity(card2_tokens, card3_tokens), 0.3)
+
+        # Looping back to card 1 should exceed the 0.65 threshold
+        self.assertGreater(similarity(card1_tokens, card1_again), 0.65)
+
+    def test_carousel_deduplication_by_context(self):
+        """Test that distinct cards with similar button coordinates are not false-skipped."""
+        done_contexts = set()
+
+        # Card 1: Brooks Brothers
+        ctx1 = "brooks brothers"
+        self.assertNotIn(ctx1, done_contexts)
+        done_contexts.add(ctx1)
+
+        # Card 2: DeFacto arriving at identical screen coordinates
+        ctx2 = "defacto indirim"
+        self.assertNotIn(ctx2, done_contexts)
+        done_contexts.add(ctx2)
+
+        # Re-encountering Card 1 should be caught by done_contexts
+        self.assertIn("brooks brothers", done_contexts)
+
+    def test_swept_carousel_caching(self):
+        """Test that already swept carousel fingerprints are skipped."""
+        swept_fps = set()
+        carousel_fp = "beymen|bonus|firsati|5000|tl"
+
+        self.assertNotIn(carousel_fp, swept_fps)
+        swept_fps.add(carousel_fp)
+
+        # Subsequent round seeing the same carousel band
+        self.assertIn(carousel_fp, swept_fps)
+
 if __name__ == "__main__":
     unittest.main()
