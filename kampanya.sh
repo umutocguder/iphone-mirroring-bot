@@ -11,7 +11,6 @@ exec "$DIR/bot" run \
   --max-taps 100 \
   --max-rounds 60 \
   --after-tap 0.8 \
-  --after-scroll 0.6 \
-  --delay 0.15 \
-  --no-hsweep \
+  --after-scroll 0.5 \
+  --delay 0.12 \
   "$@"

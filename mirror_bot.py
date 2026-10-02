@@ -709,7 +709,7 @@ class Bot:
         tapped = 0
         prev = self.band_fingerprint(y)
         seen = {prev}
-        settle = max(self.args.after_scroll, 1.25)
+        settle = max(self.args.after_scroll, 0.45)
         announced = False
         for _ in range(self.args.max_hscroll):
             self.hstep(y, back=back)
