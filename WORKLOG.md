@@ -90,3 +90,26 @@ Bu dosya, iPhone Mirroring Bot projesinde yapılan tüm geliştirmeleri, mimari 
 - **Görev ve Amaç**: Projeye özgün vektör logo (`assets/logo.svg`) eklenmesi ve marka kimliği standardının sağlanması.
 - **Doğrulama**: 7 adet otomatik test çalıştırıldı (All Passed).
 - **Etkilenen Dosyalar**: `assets/logo.svg`, `WORKLOG.md`.
+
+---
+
+## 2026-10-02 15:05 - Turbo Hız Optimizasyonu ve Bağlamsal Kampanya Doğruluğu
+- **Görev ve Amaç**: Botun tarama hızının 4-5 kat artırılması, yatay kaydırma kaynaklı takılmaların ve buton kaçırma / aynı butona mükerrer dokunma sorunlarının çözülmesi.
+- **Teknik Kararlar ve Yapılan İyileştirmeler**:
+  1. **Bağlamsal (Context-Based) Tekilleştirme**:
+     - Sabit koordinat dedupe'u yerine her "Katıl" butonu üzerindeki en yakın kampanya başlığı (`get_context`) ile ilişkilendirildi.
+     - Yeni kart eski kartın koordinatına kaysa bile başlığı farklı olduğu için asla kaçırılmıyor.
+     - Aynı kart ekranda kalsa bile mükerrer tıklama riski sıfırlandı.
+  2. **Genişletilmiş Kelime ve Boyut Eşleme**:
+     - `JOIN_WORDS` tuple'ına `"katiiin"` ("Katılın") ve `"katiimak"` eklendi.
+     - `max_chars` sınırı 24'ten 36'ya çıkarılarak uzun kampanya metinlerinin elenmesi önlendi.
+  3. **Yatay Kaydırma (H-Sweep) Tasfiyesi**:
+     - Bonus Flaş dikey listesinde karusel olmadığı için turları 10-15 sn kilitleyen `sweep_rows` dikey modda `--no-hsweep` ile devre dışı bırakıldı.
+  4. **Turbo Gecikmeler**:
+     - `after-tap`: 2.2s -> 0.8s
+     - `after-scroll`: 1.2s -> 0.6s
+     - `delay`: 0.35s -> 0.15s
+     - Mouse down/up: 0.12s -> 0.04s
+- **Doğrulama**: `py_compile` ve 7/7 test paketi başarıyla tamamlandı.
+- **Etkilenen Dosyalar**: `mirror_bot.py`, `kampanya.sh`, `WORKLOG.md`.
+

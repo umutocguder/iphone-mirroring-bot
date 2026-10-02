@@ -41,7 +41,7 @@ SESSION_ENDED_WORDS = ("iphone in use", "lock your iphone", "mirroring ended",
 UNLOCK_WORDS = ("unlock your iphone", "iphone unuzun kilidini")
 CONNECT_WORDS = ("connect", "baglan")
 
-JOIN_WORDS = ("katii",)
+JOIN_WORDS = ("katii", "katiiin", "katiimak")
 SKIP_WORDS = ("katiidiniz", "katiidin", "katiiim", "katiiiminiz", "katiiindi", "katiindi", "katiiamadi")
 
 
@@ -98,7 +98,7 @@ def loosen(s: str) -> str:
     return re.sub(r"[il1|!]", "i", s)
 
 
-def is_join(tb: TextBox, extra: re.Pattern | None, max_chars: int = 24) -> bool:
+def is_join(tb: TextBox, extra: re.Pattern | None, max_chars: int = 36) -> bool:
     if len(tb.text.strip()) > max_chars:
         return False
     loose = tb.loose
@@ -384,34 +384,34 @@ class Input:
             self.move(x, y)
             return
         self.move(x, y)
-        time.sleep(0.12)
+        time.sleep(0.04)
         self._post(Quartz.CGEventCreateMouseEvent(
             None, Quartz.kCGEventLeftMouseDown, (x, y), Quartz.kCGMouseButtonLeft))
-        time.sleep(0.06)
+        time.sleep(0.04)
         self._post(Quartz.CGEventCreateMouseEvent(
             None, Quartz.kCGEventLeftMouseUp, (x, y), Quartz.kCGMouseButtonLeft))
         time.sleep(self.delay)
 
-    def scroll(self, x: float, y: float, amount: int, steps: int = 8) -> None:
+    def scroll(self, x: float, y: float, amount: int, steps: int = 6) -> None:
         self.check()
         self.move(x, y)
-        time.sleep(0.1)
+        time.sleep(0.04)
         per = int(amount / steps)
         for _ in range(steps):
             self._post(Quartz.CGEventCreateScrollWheelEvent(
                 None, Quartz.kCGScrollEventUnitPixel, 1, per))
-            time.sleep(0.03)
+            time.sleep(0.02)
         time.sleep(self.delay)
 
-    def hscroll(self, x: float, y: float, amount: int, steps: int = 6) -> None:
+    def hscroll(self, x: float, y: float, amount: int, steps: int = 5) -> None:
         self.check()
         self.move(x, y)
-        time.sleep(0.1)
+        time.sleep(0.04)
         per = int(amount / steps)
         for _ in range(steps):
             self._post(Quartz.CGEventCreateScrollWheelEvent(
                 None, Quartz.kCGScrollEventUnitPixel, 2, 0, per))
-            time.sleep(0.03)
+            time.sleep(0.02)
         time.sleep(self.delay)
 
     def swipe(self, x1: float, y1: float, x2: float, y2: float, steps: int = 22) -> None:
@@ -501,6 +501,7 @@ class Bot:
         self.tab_words = [normalize(w) for w in args.tab_words.split(",") if w.strip()]
         self.tab_sig: list[str] = []
         self.recent: list[tuple[str, float, float, float]] = []
+        self.done_contexts: set[str] = set()
 
     def insets(self) -> tuple[float, float, float, float]:
         """--inset verilmediyse pencere yüksekliğinden hesapla (uygulamadan bağımsız)."""
@@ -630,33 +631,62 @@ class Bot:
                 return True
         return False
 
+    def get_context(self, tb: TextBox, boxes: list[TextBox]) -> str:
+        """Butonun üzerindeki ilgili kampanya başlığı / kart metni."""
+        cands = [b for b in boxes
+                 if b != tb and b.rect.y < tb.rect.y
+                 and (tb.rect.y - b.rect.y) < 220
+                 and abs(b.rect.cx - tb.rect.cx) < 180
+                 and len(b.norm) >= 4
+                 and not is_join(b, self.extra, self.args.max_chars)]
+        if not cands:
+            return ""
+        cands.sort(key=lambda b: (tb.rect.y - b.rect.y))
+        return cands[0].norm
+
     def tap_visible_joins(self, band: tuple[float, float] | None = None) -> int:
         """Görünen ekrandaki tüm Katıl butonlarına sırayla dokunur."""
         tapped = 0
         radius = self.args.dedupe_radius
         now = time.time()
         self.recent = [r for r in self.recent if now - r[3] < self.args.dedupe_seconds]
-        done: list[tuple[str, float, float, float]] = list(self.recent)
-
-        def already(b: TextBox) -> bool:
-            return any(t == b.norm and abs(x - b.rect.cx) < radius and abs(y - b.rect.cy) < radius
-                       for t, x, y, _ in done)
+        frame_tapped_points: list[tuple[float, float]] = []
 
         for _ in range(self.args.max_taps_per_screen):
             if self.taps >= self.args.max_taps:
                 return tapped
-            targets = [b for b in self.look() if is_join(b, self.extra, self.args.max_chars)]
+            boxes = self.look()
+            targets = [b for b in boxes if is_join(b, self.extra, self.args.max_chars)]
             if band is not None:
                 targets = [b for b in targets if abs(b.rect.cy - band[0]) <= band[1] / 2]
-            targets = [b for b in targets if not already(b)]
-            if not targets:
+
+            valid_targets = []
+            for b in targets:
+                if any(abs(fx - b.rect.cx) < radius and abs(fy - b.rect.cy) < radius for fx, fy in frame_tapped_points):
+                    continue
+                ctx = self.get_context(b, boxes)
+                if ctx and ctx in self.done_contexts:
+                    continue
+                if not ctx:
+                    if any(t == b.norm and abs(x - b.rect.cx) < radius and abs(y - b.rect.cy) < radius
+                           for t, x, y, _ in self.recent):
+                        continue
+                valid_targets.append((b, ctx))
+
+            if not valid_targets:
                 return tapped
-            tb = targets[0]
-            done.append((tb.norm, tb.rect.cx, tb.rect.cy, time.time()))
-            self.recent = done[-40:]
-            print(f"  → tık: {tb.text!r} @ ({tb.rect.cx:.0f},{tb.rect.cy:.0f}) conf={tb.conf:.2f}")
+
+            tb, ctx = valid_targets[0]
+            frame_tapped_points.append((tb.rect.cx, tb.rect.cy))
+            if ctx:
+                self.done_contexts.add(ctx)
+            self.recent.append((tb.norm, tb.rect.cx, tb.rect.cy, time.time()))
+            self.recent = self.recent[-50:]
+
+            ctx_info = f" [{ctx[:20]}]" if ctx else ""
+            print(f"  → tık: {tb.text!r}{ctx_info} @ ({tb.rect.cx:.0f},{tb.rect.cy:.0f}) conf={tb.conf:.2f}")
             self.inp.click(tb.rect.cx, tb.rect.cy)
-            self.record("tap", text=tb.text, x=round(tb.rect.cx), y=round(tb.rect.cy),
+            self.record("tap", text=tb.text, context=ctx, x=round(tb.rect.cx), y=round(tb.rect.cy),
                         dry_run=self.args.dry_run)
             self.taps += 1
             tapped += 1
@@ -989,10 +1019,10 @@ def main(argv=None) -> None:
     sp.add_argument("--max-rounds", type=int, default=40)
     sp.add_argument("--scroll", type=int, default=-300,
                     help="tur başına dikey scroll (px); küçük değer her satırı orta bölgeden geçirir")
-    sp.add_argument("--delay", type=float, default=0.35, help="her girdiden sonra bekleme")
-    sp.add_argument("--after-tap", type=float, default=1.4)
-    sp.add_argument("--after-scroll", type=float, default=0.9)
-    sp.add_argument("--warmup", type=float, default=3.0)
+    sp.add_argument("--delay", type=float, default=0.15, help="her girdiden sonra bekleme")
+    sp.add_argument("--after-tap", type=float, default=0.8)
+    sp.add_argument("--after-scroll", type=float, default=0.6)
+    sp.add_argument("--warmup", type=float, default=1.5)
     sp.add_argument("--search", default=None,
                     help="taramaya başlamadan önce arama çubuğuna yazılacak kelime (örn: 'katıl')")
     sp.add_argument("--search-coords", default=None,

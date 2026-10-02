@@ -8,9 +8,10 @@
 DIR="$(cd "$(dirname "$0")" && pwd)"
 exec "$DIR/bot" run \
   --to-top \
-  --max-taps 80 \
+  --max-taps 100 \
   --max-rounds 60 \
-  --after-tap 2.2 \
-  --after-scroll 1.2 \
-  --hscroll -280 \
+  --after-tap 0.8 \
+  --after-scroll 0.6 \
+  --delay 0.15 \
+  --no-hsweep \
   "$@"
