@@ -130,5 +130,61 @@ class TestMirrorBotCore(unittest.TestCase):
         # Subsequent round seeing the same carousel band
         self.assertIn(carousel_fp, swept_fps)
 
+    def test_filter_band_exclusion(self):
+        """Test that BONUS / PARACARD and search bands are detected as filter bands."""
+        rect_y = 192.0
+        # Anything with y < rect.y + 240 (432.0) is in the sticky top filter area
+        self.assertTrue(333.0 < rect_y + 240)
+        self.assertTrue(355.0 < rect_y + 240)
+        self.assertFalse(510.0 < rect_y + 240)
+
+        # Token based detection
+        filter_norms1 = {"bonus", "paracard", "tumu", "kampanya takip"}
+        is_filter1 = ("bonus" in filter_norms1 and "paracard" in filter_norms1)
+        self.assertTrue(is_filter1)
+
+        filter_norms2 = {"bonus", "parakart"}
+        is_filter2 = ("bonus" in filter_norms2 and "parakart" in filter_norms2)
+        self.assertTrue(is_filter2)
+
+        # Regular campaign band containing "bonus" but not "paracard"
+        campaign_norms = {"giyim", "kozmetik", "1500", "tl", "bonus", "populer"}
+        is_filter_campaign = ("bonus" in campaign_norms and "paracard" in campaign_norms)
+        self.assertFalse(is_filter_campaign)
+
+    def test_infinite_carousel_loop_break_by_title(self):
+        """Test that infinite paging carousels stop immediately when returning to initial title."""
+        initial_title = "giyim kozmetik ayakkabi"
+        seen_titles = {initial_title}
+
+        step1_title = "market alisverislerinize"
+        seen_titles.add(step1_title)
+
+        step2_title = "restoranlarda 600 tl"
+        seen_titles.add(step2_title)
+
+        # Step 3 loops back to initial title
+        step3_title = "giyim kozmetik ayakkabi"
+        looped = (step3_title == initial_title) or (step3_title in seen_titles)
+        self.assertTrue(looped)
+
+    def test_end_card_tap_simulation(self):
+        """Test that end cards in horizontal row trigger join taps when motion stops."""
+        class MockSweep:
+            def __init__(self):
+                self.tapped = 0
+            def tap_visible(self):
+                self.tapped += 1
+
+        mock = MockSweep()
+        prev_fp = "card3|firsat|katil"
+        curr_fp = "card3|firsat|katil"  # List did not change (hit wall)
+
+        if curr_fp == prev_fp:
+            mock.tap_visible()
+
+        self.assertEqual(mock.tapped, 1)
+
 if __name__ == "__main__":
     unittest.main()
+

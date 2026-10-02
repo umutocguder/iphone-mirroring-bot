@@ -700,12 +700,43 @@ class Bot:
         return "|".join(sorted(b.norm for b in self.look()
                                if abs(b.rect.cy - y) <= half and b.norm))
 
+    def is_filter_band(self, y: float) -> bool:
+        """BONUS | PARACARD veya arama çubuğu gibi sabit üst filtre bandı mı kontrol eder."""
+        if y < self.rect.y + 240:
+            return True
+        half = self.args.band / 2
+        boxes = [b for b in self.look() if abs(b.rect.cy - y) <= half]
+        norms = {b.norm for b in boxes}
+        if ("bonus" in norms and "paracard" in norms) or ("bonus" in norms and "parakart" in norms):
+            return True
+        if any("sektor arayin" in n or "kampanya veya sektor" in n for n in norms):
+            return True
+        return False
+
+    def get_card_title_in_band(self, y: float) -> str:
+        """Band içindeki en belirgin kampanya başlığı / metni."""
+        half = self.args.band / 2
+        boxes = [b for b in self.look()
+                 if abs(b.rect.cy - y) <= half
+                 and len(b.norm) >= 4
+                 and not is_join(b, self.extra, self.args.max_chars)
+                 and b.norm not in {"takip ve detay", "populer", "yeni", "hemen katil", "katil", "katildiniz"}]
+        if not boxes:
+            return ""
+        boxes.sort(key=lambda b: len(b.norm), reverse=True)
+        return boxes[0].norm
+
     def sweep_row(self, y: float) -> int:
         """Yatay kaydırmalı kart satırını sağa (sonraki karta) doğru gezer.
 
-        Başa dönen (infinite loop / paging) karuselleri başa döndüğü an yakalar ve bitirir.
-        Son karttaki 'Katıl' butonunu da asla kaçırmadan tıklar.
+        - BONUS / PARACARD sabit filtre bandına dokunmaz.
+        - Başa dönen (infinite loop / paging) karuselleri ilk karta döndüğü an yakalar ve durur.
+        - Sağa kaydırmanın son kartındaki Katıl butonunu asla kaçırmadan tıklar.
+        - Asla sola geri sarmaz (back=False).
         """
+        if self.is_filter_band(y):
+            return 0
+
         tapped = 0
         settle = max(self.args.after_scroll, 0.45)
 
@@ -716,14 +747,10 @@ class Bot:
         if not initial_fp:
             return tapped
 
+        initial_title = self.get_card_title_in_band(y)
         initial_tokens = set(initial_fp.split("|"))
         seen_fps = {initial_fp}
-        seen_card_keys: set[str] = set()
-
-        first_boxes = self.look()
-        cands = [b for b in first_boxes if abs(b.rect.cy - y) <= self.args.band / 2 and len(b.norm) >= 4]
-        if cands:
-            seen_card_keys.add(cands[0].norm)
+        seen_titles = {initial_title} if initial_title else set()
 
         prev_fp = initial_fp
         announced = False
@@ -733,8 +760,9 @@ class Bot:
             time.sleep(settle)
 
             curr_fp = self.band_fingerprint(y)
+            curr_title = self.get_card_title_in_band(y)
 
-            # 1. İçerik hiç değişmediyse (yatay kaydırma bitti veya bu satır karusel değil)
+            # 1. İçerik hiç değişmediyse (yatay kaydırma bitti / duvar)
             if curr_fp == prev_fp:
                 # Son kartta Katıl varsa asla kaçırma, tıkla ve bitir!
                 tapped += self.tap_visible_joins(band=(y, self.args.band))
@@ -744,18 +772,25 @@ class Bot:
             curr_tokens = set(curr_fp.split("|"))
             overlap = len(initial_tokens & curr_tokens) / max(1, len(initial_tokens | curr_tokens))
 
-            curr_boxes = self.look()
-            curr_cands = [b for b in curr_boxes if abs(b.rect.cy - y) <= self.args.band / 2 and len(b.norm) >= 4]
-            curr_ctx = curr_cands[0].norm if curr_cands else ""
+            looped = False
+            if step >= 2:
+                if initial_title and curr_title and curr_title == initial_title:
+                    looped = True
+                elif curr_title and curr_title in seen_titles:
+                    looped = True
+                elif curr_fp in seen_fps:
+                    looped = True
+                elif overlap > 0.65:
+                    looped = True
 
-            if curr_fp in seen_fps or (curr_ctx and curr_ctx in seen_card_keys) or (step >= 2 and overlap > 0.65):
+            if looped:
                 if announced or step > 1:
                     print(f"  ↔ Karusel başa döndü (ilk karta geldi), bırakılıyor: y={y:.0f}")
                 return tapped
 
             seen_fps.add(curr_fp)
-            if curr_ctx:
-                seen_card_keys.add(curr_ctx)
+            if curr_title:
+                seen_titles.add(curr_title)
             prev_fp = curr_fp
 
             if not announced:
@@ -767,25 +802,27 @@ class Bot:
             if self.taps >= self.args.max_taps:
                 return tapped
 
+        # Döngü max_hscroll sınırına ulaştıysa son kartı da kontrol et
+        tapped += self.tap_visible_joins(band=(y, self.args.band))
         return tapped
 
     def hstep(self, y: float, back: bool = False) -> None:
         amount = -self.args.hscroll if back else self.args.hscroll
-        # Sayfalı (paging) üst kartlarda ve swipe modunda parmak çekme hareketi kullanılır
-        if self.args.hmode == "swipe" or y < self.rect.y + self.rect.h * 0.45:
-            a, b = (0.20, 0.80) if back else (0.80, 0.20)
-            self.inp.swipe(self.rect.x + self.rect.w * a, y,
-                           self.rect.x + self.rect.w * b, y, steps=12)
-        else:
-            self.inp.hscroll(self.rect.cx, y, amount)
+        # Sayfalı ve normal karusellerde yüksek momentumlu yatay scroll
+        self.inp.hscroll(self.rect.cx, y, amount)
 
     def sweep_bands(self) -> list[float]:
-        """Kartın tamamının görünebildiği güvenli bant merkezleri (tekrarı önler)."""
+        """Kartın tamamının görünebildiği güvenli bant merkezleri.
+
+        BONUS | PARACARD ve arama çubuğu gibi sabit üst filtre alanını (y < self.rect.y + 240)
+        kesinlikle hariç tutar.
+        """
         margin = self.args.edge_margin if self.args.edge_margin is not None else self.args.band * 0.4
-        first = self.rect.y + margin + self.args.band / 2
+        min_top = self.rect.y + 240
+        first = max(min_top, self.rect.y + margin + self.args.band / 2)
         last = self.rect.y + self.rect.h - margin - self.args.band / 2
         if last < first:
-            return [self.rect.cy]
+            return [max(min_top, self.rect.cy)]
         out, y = [], first
         step = self.args.band * 0.85
         while y <= last + 1:
@@ -936,63 +973,101 @@ class Bot:
     def ensure_bonus_app_open(self) -> None:
         """Uygulama veya Kampanyalar listesi açık değilse Spotlight ile açıp Kampanyalar'a gider."""
         boxes = self.look()
-        # Eğer ekranda zaten 'Kampanyalar' veya 'Bonus' kelimeleri varsa uygulama zaten açık!
-        if any("kampanya" in b.norm or "bonus" in b.norm for b in boxes):
-            for b in boxes:
-                if "kampanya" in b.norm and b.rect.cy > self.rect.y + self.rect.h * 0.65:
-                    print("  → Alt menüdeki 'Kampanyalar' sekmesine dokunuluyor…")
-                    self.inp.click(b.rect.cx, b.rect.cy)
-                    time.sleep(1.0)
-                    return
+        texts = [b.norm for b in boxes]
+
+        # 1. Zaten kampanya listesinde miyiz?
+        is_already_on_kampanyalar = (
+            any("kampanya" in t for t in texts) and
+            (any("bonus" in t for t in texts) or any("paracard" in t for t in texts) or
+             any("katil" in t for t in texts) or any("takip ve detay" in t for t in texts))
+        )
+        if is_already_on_kampanyalar:
             return
 
+        # 2. Bonus Flaş açık ama ana sayfa veya başka sekmede mi?
+        for b in boxes:
+            if "kampanya" in b.norm and b.rect.cy > self.rect.y + self.rect.h * 0.70:
+                print(f"  → Alt menüdeki 'Kampanyalar' sekmesine dokunuluyor @ ({b.rect.cx:.0f},{b.rect.cy:.0f})…")
+                self.inp.click(b.rect.cx, b.rect.cy)
+                time.sleep(1.5)
+                return
+
+        # 3. Bonus Flaş hiç açık değilse Spotlight ile aç
         print("📱 Kampanya listesi açık değil, Spotlight ile BonusFlaş başlatılıyor…")
         activate_mirror()
-        time.sleep(0.4)
+        time.sleep(0.3)
 
-        # 1. Spotlight'ı tetikle
+        # 3.1 Ana Ekrana geç (View -> Home Screen)
         subprocess.run([
             "osascript", "-e",
+            'tell application "iPhone Mirroring" to activate\n'
+            'delay 0.3\n'
             'tell application "System Events" to tell process "iPhone Mirroring"\n'
             '  try\n'
-            '    click menu item "Spotlight" of menu 1 of menu bar item "View" of menu bar 1\n'
+            '    click menu item "Home Screen" of menu "View" of menu bar item "View" of menu bar 1\n'
             '  on error\n'
-            '    keystroke "3" using command down\n'
+            '    keystroke "1" using command down\n'
             '  end try\n'
             'end tell'
         ], capture_output=True)
         time.sleep(0.8)
 
-        # 2. "BonusFlas" yaz (tam uygulama adı)
-        self.inp.type_text("BonusFlas")
+        # 3.2 Spotlight'ı aç (View -> Spotlight)
+        subprocess.run([
+            "osascript", "-e",
+            'tell application "iPhone Mirroring" to activate\n'
+            'delay 0.2\n'
+            'tell application "System Events" to tell process "iPhone Mirroring"\n'
+            '  try\n'
+            '    click menu item "Spotlight" of menu "View" of menu bar item "View" of menu bar 1\n'
+            '  on error\n'
+            '    keystroke "3" using command down\n'
+            '  end try\n'
+            'end tell'
+        ], capture_output=True)
+        time.sleep(0.6)
+
+        # 3.3 'bonus' yaz
+        subprocess.run([
+            "osascript", "-e",
+            'tell application "System Events" to tell process "iPhone Mirroring"\n'
+            '  keystroke "bonus"\n'
+            'end tell'
+        ], capture_output=True)
         time.sleep(1.0)
 
-        # 3. Spotlight sonuçlarında 'BonusFlaş' veya 'Bonus' kutusunu bul ve tıkla!
-        spotlight_boxes = self.look()
-        app_target = None
+        # 3.4 Spotlight sonuçlarında BonusFlaş ikonuna tıkla veya Return bas
+        spotlight_boxes = self.look_full()
+        bonus_target = None
         for b in spotlight_boxes:
-            if "bonus" in b.norm or "flas" in b.norm:
-                if b.rect.cy > self.rect.y + self.rect.h * 0.15:
-                    app_target = b
+            if "bonusflas" in b.norm or "bonusfla" in b.norm:
+                bonus_target = b
+                break
+        if not bonus_target:
+            for b in spotlight_boxes:
+                if "bonus" in b.norm and b.rect.cy > self.rect_full.y + self.rect_full.h * 0.15:
+                    bonus_target = b
                     break
 
-        if app_target:
-            print(f"  → Spotlight sonucundaki uygulamaya dokunuluyor: {app_target.text!r} @ ({app_target.rect.cx:.0f},{app_target.rect.cy:.0f})")
-            self.inp.click(app_target.rect.cx, app_target.rect.cy)
+        if bonus_target:
+            # iOS Spotlight'ta uygulama ikonu metnin ~35pt yukarısındadır
+            icon_y = bonus_target.rect.cy - 35
+            print(f"  → BonusFlaş uygulama ikonuna dokunuluyor: ({bonus_target.rect.cx:.0f},{icon_y:.0f})")
+            self.inp.click(bonus_target.rect.cx, icon_y)
         else:
-            print("  → Uygulama satırı OCR ile bulunamadı, Return tuşuna basılıyor…")
+            print("  → BonusFlaş metni bulunamadı, Return ile ilk sonuca giriliyor…")
             self.inp.press_key(36)
 
-        time.sleep(2.5)
+        time.sleep(3.5)
 
-        # 4. Kampanyalar sekmesini bul ve tıkla
+        # 3.5 Bonus Flaş açıldıktan sonra alt menüdeki Kampanyalar sekmesine tıkla
         self.refresh_rect()
-        boxes = self.look()
-        for b in boxes:
-            if "kampanya" in b.norm:
+        app_boxes = self.look()
+        for b in app_boxes:
+            if "kampanya" in b.norm and b.rect.cy > self.rect.y + self.rect.h * 0.70:
                 print(f"  → 'Kampanyalar' sekmesine dokunuluyor @ ({b.rect.cx:.0f},{b.rect.cy:.0f})")
                 self.inp.click(b.rect.cx, b.rect.cy)
-                time.sleep(1.2)
+                time.sleep(1.5)
                 break
 
     def run(self) -> None:
@@ -1128,9 +1203,9 @@ def main(argv=None) -> None:
                     help="yansıtma kopmuşsa Connect'e basmayı dene")
     sp.add_argument("--hmode", choices=("wheel", "swipe"), default="wheel",
                     help="yatay ilerletme yöntemi: trackpad scroll (güvenli) veya swipe")
-    sp.add_argument("--hscroll", type=int, default=-200,
+    sp.add_argument("--hscroll", type=int, default=-250,
                     help="yatay kaydırmalı satırlarda adım (px, negatif = sağa ilerle)")
-    sp.add_argument("--max-hscroll", type=int, default=8, help="bir satırda en fazla yatay adım")
+    sp.add_argument("--max-hscroll", type=int, default=25, help="bir satırda en fazla yatay adım")
     sp.add_argument("--band", type=float, default=170, help="yatay tarama bandı yüksekliği (pt)")
     sp.add_argument("--edge-margin", type=float, default=None,
                     help="yatay tarama için görüntü kenarlarından bırakılacak pay (pt, varsayılan=band)")

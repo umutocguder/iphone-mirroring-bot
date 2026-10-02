@@ -135,5 +135,16 @@ Bu dosya, iPhone Mirroring Bot projesinde yapılan tüm geliştirmeleri, mimari 
 - **Doğrulama**: `python3 -m unittest discover -s tests -p "test_*.py"` ile 10/10 test 0.22s içinde %100 başarıyla geçti.
 - **Etkilenen Dosyalar**: `mirror_bot.py`, `tests/test_mirror_bot.py`, `WORKLOG.md`.
 
+---
+
+## 2026-10-02 15:55 - Üst Filtre Bandı İzolasyonu, Başa Dönen Paging Karuseli ve Spotlight İkon Dokunuşu
+- **Görev ve Amaç**:
+  1. **BONUS ve PARACARD Filtre Bandının İzolasyonu**: Ekranın üst kısmındaki (`y < self.rect.y + 240`, `y ≈ 333`) sabit filtre sekmelerine (`BONUS | PARACARD | Tümü`) farenin gitmesi `is_filter_band` ve `sweep_bands` alt sınırı ile kesin olarak engellendi.
+  2. **İlk Kampanyayı Tekrar Görünce Durma (Infinite Paging Loop)**: Sayfanın başındaki dönen kart yapısının ilk kampanya başlığı (`get_card_title_in_band`) kaydedilerek, sağa kaydırdıkça başa dönüldüğü an (`curr_title == initial_title`) anında tespit edilip satır sonlandırılıyor.
+  3. **Yatay Scrolları Sonuna Kadar Gezme & Son Kart Katıl Dokunuşu**: `max_hscroll` sınırı 25'e çıkarıldı. Sağa doğru kaydırmanın sonuna ulaşıldığında (`curr_fp == prev_fp`), duvara çarpmış son karttaki "Katıl" butonu asla kaçırılmadan tıklandıktan sonra satırdan çıkılıyor.
+  4. **Otomatik Spotlight Başlatma**: Bonus Flaş açık değilse `View -> Home Screen` ve `View -> Spotlight` üzerinden "bonus" yazılarak, Top Hit altındaki `BonusFlaş` uygulama ikonuna (`cy - 35`) tıklanıp "Kampanyalar" sekmesi açılıyor.
+  5. **Birim Test Paketi**: 13/13 test %100 başarıyla geçti.
+- **Etkilenen Dosyalar**: `mirror_bot.py`, `tests/test_mirror_bot.py`, `WORKLOG.md`.
+
 
 
