@@ -34,3 +34,6 @@ id_rsa*
 id_ed25519*
 
 PROJE.md
+
+# graphify generated knowledge graph
+graphify-out/
